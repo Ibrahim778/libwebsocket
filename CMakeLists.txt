@@ -3,6 +3,10 @@ project(libwebsocket)
 
 set(CMAKE_CXX_STANDARD 11)
 
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    add_compile_definitions(_WEBSOCKET_DEBUG=1)
+endif()
+
 add_executable(${PROJECT_NAME}
     include/websocket.h
     include/certs.h

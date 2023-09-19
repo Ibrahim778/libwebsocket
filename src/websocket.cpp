@@ -19,7 +19,7 @@
 #include "sha1.h"
 
 #ifdef _WEBSOCKET_DEBUG
-#define print(...) printf(_VA_ARGS_)
+#define print(...) printf(__VA_ARGS__)
 #else
 #define print(...) \
     {              \
@@ -781,6 +781,8 @@ void *Websocket::HandshakeThread(void *userDat)
         else
         {
             p = strchr(tok, ' ');
+            if(!p)
+                continue;
             *p = '\0';
             if (strcasecmp(tok, "Upgrade:") == 0)
             {
