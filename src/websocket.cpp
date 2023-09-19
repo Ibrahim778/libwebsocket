@@ -2,7 +2,9 @@
 #include <string>
 #include <list>
 #include <unistd.h>
+#include <sys/types.h>
 #include <sys/socket.h>
+#include <netdb.h>
 
 #include <mbedtls/ssl.h>
 #include <mbedtls/x509_crt.h>
@@ -15,6 +17,15 @@
 #include "websocket.h"
 #include "certs.h"
 #include "sha1.h"
+
+#ifdef _WEBSOCKET_DEBUG
+#define print(...) printf(_VA_ARGS_)
+#else
+#define print(...) \
+    {              \
+        (void)0;   \
+    }
+#endif
 
 extern "C"
 {
@@ -44,14 +55,14 @@ Websocket::Websocket(std::string uri)
 
     if (pthread_mutex_init(&lock, nullptr) != 0)
     {
-        printf("[Abort] Unable to init \'lock\' mutex in Websocket::Websocket\n");
+        print("[Abort] Unable to init \'lock\' mutex in Websocket::Websocket\n");
         abort();
         return; // is this even needed?
     }
 
     if (pthread_mutex_init(&write_lock, nullptr) != 0)
     {
-        printf("[Abort] Unable to init \'write_lock\' mutex in Websocket::Websocket\n");
+        print("[Abort] Unable to init \'write_lock\' mutex in Websocket::Websocket\n");
         abort();
         return; // is this even needed?
     }
@@ -61,7 +72,7 @@ Websocket::Websocket(std::string uri)
     auto protocolStart = uri.find("://");
     if (protocolStart == std::string::npos)
     {
-        printf("[Abort] Invalid / malformed scheme for URI (%s)\n", uri.c_str());
+        print("[Abort] Invalid / malformed scheme for URI (%s)\n", uri.c_str());
         abort();
         return;
     }
@@ -69,18 +80,18 @@ Websocket::Websocket(std::string uri)
     // Check protocol and assign SSL flags and default port numbers
     if (uri.rfind("wss", 0) != std::string::npos) // Websocket Secusre connection (With SSL)
     {
-        printf("[Websocket] Secure Websocket Connection\n");
+        print("[Websocket] Secure Websocket Connection\n");
         service = "443";
         flags |= CLIENT_IS_SSL;
     }
     else if (uri.rfind("ws", 0) != std::string::npos)
     {
-        printf("[Websocket] Standard Websocket Connection\n");
+        print("[Websocket] Standard Websocket Connection\n");
         service = "80";
     }
     else
     {
-        printf("[Abort] Invalid protocol for URI (%s)\n", uri.c_str());
+        print("[Abort] Invalid protocol for URI (%s)\n", uri.c_str());
         abort();
         return;
     }
@@ -90,7 +101,7 @@ Websocket::Websocket(std::string uri)
     if (serviceStart != std::string::npos)
         service = uri.substr(serviceStart + 1, uri.length() - serviceStart);
 
-    printf("[Websocket] Port: %s\n", service.c_str());
+    print("[Websocket] Port: %s\n", service.c_str());
 
     file = "/"; // Set a default file path incase none is specified
 
@@ -98,10 +109,10 @@ Websocket::Websocket(std::string uri)
     if (fileStart != std::string::npos)
         file = uri.substr(fileStart, (serviceStart != std::string::npos ? serviceStart : uri.length()) - fileStart);
 
-    printf("[Websocket] File: %s\n", file.c_str());
+    print("[Websocket] File: %s\n", file.c_str());
 
     host = uri.substr(protocolStart + 3, fileStart == std::string::npos ? serviceStart - (protocolStart + 3) : fileStart - (protocolStart + 3));
-    printf("[Websocket] Host: %s\n", host.c_str());
+    print("[Websocket] Host: %s\n", host.c_str());
 
     pthread_mutex_unlock(&lock);
 }
@@ -148,29 +159,29 @@ int Websocket::OpenConnection()
 
             mbedtls_entropy_init(&g_entropy);
 
-            printf("[Websocket] mbedtls_ctr_drbg_seed\n");
+            print("[Websocket] mbedtls_ctr_drbg_seed\n");
 
             res = mbedtls_ctr_drbg_seed(&g_ctr_drbg, mbedtls_entropy_func, &g_entropy, (const unsigned char *)"libwebsocketclient", 18);
 
             if (res != 0)
             {
-                printf("[Websocket] failed! mbedtls_ctr_drbg_seed returned %d\n", res);
+                print("[Websocket] failed! mbedtls_ctr_drbg_seed returned %d\n", res);
                 return res;
             }
 
-            printf("[Websocket] Loading the CA root certificate\n");
+            print("[Websocket] Loading the CA root certificate\n");
 
             res = mbedtls_x509_crt_parse(&g_cacert, (const unsigned char *)mbedtls_test_cas_pem, mbedtls_test_cas_pem_len);
 
             if (res != 0)
             {
-                printf("failed! mbedtls_x509_crt_parse returned -0x%x\n", (unsigned int)-res);
+                print("failed! mbedtls_x509_crt_parse returned -0x%x\n", (unsigned int)-res);
                 return res;
             }
 
-            printf("[Websocket] ok (%d skipped)\n", res);
+            print("[Websocket] ok (%d skipped)\n", res);
 
-            printf("[Websocket] Setting up the SSL/TLS config structure\n");
+            print("[Websocket] Setting up the SSL/TLS config structure\n");
 
             res = mbedtls_ssl_config_defaults(&g_ssl_conf,
                                               MBEDTLS_SSL_IS_CLIENT,
@@ -178,7 +189,7 @@ int Websocket::OpenConnection()
                                               MBEDTLS_SSL_PRESET_DEFAULT);
             if (res != 0)
             {
-                printf("[Websocket] failed! mbedtls_ssl_config_defaults returned %d\n", res);
+                print("[Websocket] failed! mbedtls_ssl_config_defaults returned %d\n", res);
                 return res;
             }
 
@@ -189,7 +200,7 @@ int Websocket::OpenConnection()
 
             g_flags |= WS_FLAGS_SSL_INIT;
 
-            printf("[Websocket] Global SSL Setup completed!\n");
+            print("[Websocket] Global SSL Setup completed!\n");
         }
 
         // Now we init OUR client specific things
@@ -197,28 +208,28 @@ int Websocket::OpenConnection()
         res = mbedtls_ssl_setup(&ssl, &g_ssl_conf);
         if (res != 0)
         {
-            printf("[Websocket] failed! mbedtls_ssl_setup returned %d\n", res);
+            print("[Websocket] failed! mbedtls_ssl_setup returned %d\n", res);
             return res;
         }
 
-        printf("[Websocket] SSL setup\n");
+        print("[Websocket] SSL setup\n");
 
         res = mbedtls_ssl_set_hostname(&ssl, host.c_str());
         if (res != 0)
         {
-            printf("[Websocket] failed! mbedtls_ssl_set_hostname returned %d\n\n", res);
+            print("[Websocket] failed! mbedtls_ssl_set_hostname returned %d\n\n", res);
             return res;
         }
 
-        printf("[Websocket] SSL hostname set\n");
+        print("[Websocket] SSL hostname set\n");
 
         mbedtls_ssl_set_bio(&ssl, &sockfd, mbedtls_net_send, mbedtls_net_recv, NULL);
 
-        printf("[Websocket] SSL bio set\n");
+        print("[Websocket] SSL bio set\n");
 
         mbedtls_net_init((mbedtls_net_context *)&sockfd);
 
-        printf("[Websocket] Net ready\n");
+        print("[Websocket] Net ready\n");
 
         res = mbedtls_net_connect((mbedtls_net_context *)&sockfd, host.c_str(), service.c_str(), MBEDTLS_NET_PROTO_TCP);
         if (res != 0)
@@ -229,24 +240,56 @@ int Websocket::OpenConnection()
         }
 
         // Now we perform the SSL handshake
-        printf("[Websocket] Performing the SSL/TLS handshake\n");
+        print("[Websocket] Performing the SSL/TLS handshake\n");
 
         while ((res = mbedtls_ssl_handshake(&ssl)) != 0)
         {
             if (res != MBEDTLS_ERR_SSL_WANT_READ && res != MBEDTLS_ERR_SSL_WANT_WRITE)
             {
-                printf("[Websocket] failed 0x%X\n", (unsigned int)-res);
+                print("[Websocket] failed 0x%X\n", (unsigned int)-res);
                 return res;
             }
         }
 
-        printf("[Websocket] ok\n");
+        print("[Websocket] ok\n");
 
         return 0;
     }
     else
     {
-        // TODO: implement (lol)
+        addrinfo hints, *servinfo, *p;
+        int rv, sock;
+        memset(&hints, 0, sizeof(hints));
+        hints.ai_family = AF_UNSPEC;
+        hints.ai_socktype = SOCK_STREAM;
+        if ((rv = getaddrinfo(host.c_str(), service.c_str(), &hints, &servinfo)) != 0)
+        {
+            return -3;
+        }
+
+        for (p = servinfo; p != NULL; p = p->ai_next)
+        {
+            if ((sock = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1)
+            {
+                continue;
+            }
+
+            if (connect(sock, p->ai_addr, p->ai_addrlen) == -1)
+            {
+                close(sock);
+                continue;
+            }
+            break;
+        }
+        freeaddrinfo(servinfo);
+        if (p == NULL)
+        {
+            return -4;
+        }
+        
+        sockfd = sock;
+
+        return 0;
     }
 
     return -1;
@@ -409,7 +452,7 @@ int Websocket::DataIn(char *data, size_t len)
 
 void Websocket::DispatchMessage()
 {
-    if(frames.size() == 0)
+    if (frames.size() == 0)
     {
         OnError(0, "Trying to dispatch a message when there are no saved frames!");
         return;
@@ -420,7 +463,7 @@ void Websocket::DispatchMessage()
     std::string message;
     auto opcode = frame->opcode;
 
-    while(frame != frames.end())
+    while (frame != frames.end())
     {
         message += std::string(frame->rawdata.data() + frame->headerSize, frame->payload_len);
         frame++;
@@ -446,12 +489,11 @@ int Websocket::SendControlFrame(unsigned char opcode)
     {
         n = Write(frame + sent, 2 - sent);
         sent += n;
-    } 
-    while(n > 0 && sent < n);
+    } while (n > 0 && sent < n);
 
     pthread_mutex_unlock(&write_lock);
 
-    if(n < 0)
+    if (n < 0)
     {
         OnError(n, "Failed to send control frame");
         return n;
@@ -486,29 +528,29 @@ int Websocket::SendMessage(std::string data, unsigned char fin_opcode)
     uint64_t len = data.size();
 
     if (len == 0)
-        printf("[Websocket] WARN trying to send message with size 0!\n");
-    
-    if(len <= 125)
+        print("[Websocket] WARN trying to send message with size 0!\n");
+
+    if (len <= 125)
     {
         frameSize = len + headerSize;
         lenSmall = len;
     }
-    else if(len > 125 && len <= 0xFFFF)
+    else if (len > 125 && len <= 0xFFFF)
     {
         headerSize += 2;
         frameSize = 8 + headerSize;
         lenSmall = 126;
     }
-    else if(len > 0xFFFF && len < 0xFFFFFFFFFFFFFFFFLL)
+    else if (len > 0xFFFF && len < 0xFFFFFFFFFFFFFFFFLL)
     {
         headerSize += 8;
         frameSize = len + headerSize;
         lenSmall = 127;
     }
-    else 
+    else
     {
         OnError(0, "Send data too large! just WHAT are you trying to send??");
-        return -1; 
+        return -1;
     }
 
     auto frame = new char[frameSize];
@@ -518,23 +560,23 @@ int Websocket::SendMessage(std::string data, unsigned char fin_opcode)
     frame[0] = fin_opcode;
     *(frame + 1) = lenSmall | 0x80; // Length with the MASK bit on
 
-    if(lenSmall == 126)
+    if (lenSmall == 126)
     {
         len &= 0xFFFF; // Ensure it's within range
         *(uint16_t *)&frame[2] = htons(len);
     }
-    else if(lenSmall == 127)
+    else if (lenSmall == 127)
     {
         len &= 0xFFFFFFFFFFFFFFFFLL;
         *(uint64_t *)&frame[2] = htonll(len);
     }
 
     *(int *)&frame[headerSize - 4] = maskInt; // assign mask integer at the end of the header
-    
+
     memcpy(frame + headerSize, data.data(), data.length()); // copy over the data
-    for(int i = 0; i < data.length(); i++)
+    for (int i = 0; i < data.length(); i++)
         frame[headerSize + i] ^= mask[i % 4] & 0xFF;
-    
+
     int sent = 0;
     int res = 0;
 
@@ -550,7 +592,7 @@ int Websocket::SendMessage(std::string data, unsigned char fin_opcode)
 
     delete[] frame;
 
-    if(res < 0)
+    if (res < 0)
     {
         OnError(res, "Failed to send data");
         return res;
@@ -572,11 +614,11 @@ void Websocket::HandleControlFrame(Frame &frame)
     switch (frame.opcode)
     {
     case CLOSE:
-        printf("[Websocket] Server has sent a close frame\n");
+        print("[Websocket] Server has sent a close frame\n");
         if ((flags & CLIENT_SENT_CLOSE_FRAME) == 0)
         {
             // Send a close frame as acknowledgement
-            
+
             int n = SendControlFrame(CLOSE);
 
             flags |= CLIENT_SENT_CLOSE_FRAME | CLIENT_SHOULD_CLOSE;
@@ -589,20 +631,20 @@ void Websocket::HandleControlFrame(Frame &frame)
         break;
 
     case PING:
-        printf("[Websocket] Server has sent a ping frame\n");
+        print("[Websocket] Server has sent a ping frame\n");
         res = SendControlFrame(PONG);
         if (res <= 0)
         {
             OnError(res, "Client failed to send control (PONG) frame");
             break;
         }
-        printf("[Websocket] Client has sent a pong frame\n");
+        print("[Websocket] Client has sent a pong frame\n");
         break;
     case PONG:
-        printf("[Websocket] Server has sent a PONG frame\n");
+        print("[Websocket] Server has sent a PONG frame\n");
         break;
     default:
-        printf("[Websocket] WARN unknown control frame received: 0x%X, unhandled\n", frame.opcode);
+        print("[Websocket] WARN unknown control frame received: 0x%X, unhandled\n", frame.opcode);
         break;
     }
 
@@ -613,7 +655,7 @@ void *Websocket::ProcessThread(void *userDat)
 {
     auto client = (Websocket *)userDat;
 
-    printf("[Start] Process Thread\n");
+    print("[Start] Process Thread\n");
 
     char buff[0x400];
 
@@ -621,7 +663,7 @@ void *Websocket::ProcessThread(void *userDat)
     while (!client->ShouldClose())
     {
         n = client->Read(buff, sizeof(buff) - 1);
-        if(n < 0)
+        if (n < 0)
             break;
 
         int processed = 0;
@@ -642,14 +684,14 @@ void *Websocket::ProcessThread(void *userDat)
 
     client->CleanupFrames();
 
-    printf("[Stop] Process Thread\n");
+    print("[Stop] Process Thread\n");
 
     return nullptr;
 }
 
 void *Websocket::HandshakeThread(void *userDat)
 {
-    printf("[Start] Handshake Thread\n");
+    print("[Start] Handshake Thread\n");
 
     char headers[0x400];
     char key[16];        // Encryption key
@@ -675,11 +717,11 @@ void *Websocket::HandshakeThread(void *userDat)
 
     snprintf(headers, sizeof(headers), UpgradeHeaders, client->file.c_str(), client->host.c_str(), client->service.c_str(), key64);
 
-    printf("[Websocket] Connection headers are as follows:\n%s\n", headers);
+    print("[Websocket] Connection headers are as follows:\n%s\n", headers);
 
     n = client->Write(headers, strnlen(headers, sizeof(headers)));
 
-    printf("[Websocket] Connection headers have been sent\n");
+    print("[Websocket] Connection headers have been sent\n");
 
     received = 0;
     do
@@ -700,7 +742,7 @@ void *Websocket::HandshakeThread(void *userDat)
         return nullptr;
     }
 
-    printf("[Websocket] Response headers are as follows:\n%s\n", headers);
+    print("[Websocket] Response headers are as follows:\n%s\n", headers);
 
     // Calculate the expected Sec-WebSocket-Accept key
     snprintf(respKey64, sizeof(respKey64), "%s%s", key64, "258EAFA5-E914-47DA-95CA-C5AB0DC85B11");
@@ -716,7 +758,7 @@ void *Websocket::HandshakeThread(void *userDat)
 
     base64_encode((char *)shactx.Message_Digest, 20, respKey64, sizeof(respKey64));
 
-    printf("[Websocket] Expected response key: %s\n", respKey64);
+    print("[Websocket] Expected response key: %s\n", respKey64);
 
     // Now we parse the result we got to ensure the response headers are valid
 
@@ -758,7 +800,7 @@ void *Websocket::HandshakeThread(void *userDat)
             {
                 if (strcmp(p + 1, respKey64) == 0)
                 {
-                    printf("[Websocket] Response key valid\n");
+                    print("[Websocket] Response key valid\n");
                     client->flags |= REQUEST_VALID_ACCEPT;
                 }
             }
@@ -791,7 +833,7 @@ void *Websocket::HandshakeThread(void *userDat)
 
     client->OnOpen();
 
-    printf("[Stop] Handshake thread\n");
+    print("[Stop] Handshake thread\n");
     return nullptr;
 }
 

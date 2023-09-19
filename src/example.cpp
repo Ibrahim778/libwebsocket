@@ -38,7 +38,7 @@ public:
 
     void OnMessage(std::string& message, unsigned char opcode) override
     {
-        printf("[Websocket] Received message: %s\n", message.c_str());
+        printf("Received message: %s\n", message.c_str());
         a++;
 
         if(a % 5 == 0)
@@ -59,8 +59,6 @@ public:
 
 int main()
 {
-    printf("Hello world!\n");
-
     auto c = MyClient();
 
     c.Connect();
