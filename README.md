@@ -16,7 +16,7 @@ Include files needed for the libary are the following (inside include/):
 - certs.h
 - websocket.h
 
-Note: This library currently contains test SSL certificates taken from the MbedTLS example code
+Notes: This library currently contains test SSL certificates taken from the MbedTLS example code, and currently, plain websocket connections ("ws://") are unimplimented. SSL connections require MbedTLS
 
 The following references were used in the making of this library:  
 
