@@ -23,7 +23,7 @@ public:
         
         SendControlFrame(PING);
         SendMessage("Start");
-        a= 0;
+        a = 0;
     }
 
     void OnClose() override
