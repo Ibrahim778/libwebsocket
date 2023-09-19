@@ -2,7 +2,7 @@
 
 My own websocket client library written in C++
 
-- Aims to be simple, doesn't require any dependecies apart from C++11 and mbedtls (if you're using SSL)  
+- Aims to be simple, doesn't require any dependecies apart from C++11, pthread and mbedtls (if you're using SSL)  
 - Example usage in src/example.cpp
 
 Required code for the library are in the following files (inside src/):  
