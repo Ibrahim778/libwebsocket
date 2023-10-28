@@ -538,7 +538,7 @@ int Websocket::SendMessage(std::string data, unsigned char fin_opcode)
     else if (len > 125 && len <= 0xFFFF)
     {
         headerSize += 2;
-        frameSize = 8 + headerSize;
+        frameSize = len + headerSize;
         lenSmall = 126;
     }
     else if (len > 0xFFFF && len < 0xFFFFFFFFFFFFFFFFLL)
@@ -558,7 +558,7 @@ int Websocket::SendMessage(std::string data, unsigned char fin_opcode)
     memset(frame, 0, frameSize);
 
     frame[0] = fin_opcode;
-    *(frame + 1) = lenSmall | 0x80; // Length with the MASK bit on
+    frame[1] = lenSmall | 0x80; // Length with the MASK bit on
 
     if (lenSmall == 126)
     {
